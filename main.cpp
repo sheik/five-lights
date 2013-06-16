@@ -1,3 +1,4 @@
+#include <iostream>
 #include <stdlib.h>
 #include <GL/glfw.h>
  
@@ -37,11 +38,14 @@ void Init(void)
   glEnable(GL_CULL_FACE);
 
   // smoothing?
-  glEnable (GL_LINE_SMOOTH);
-  glEnable (GL_BLEND);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glHint (GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
+  //glEnable (GL_LINE_SMOOTH);
+  //glEnable (GL_BLEND);
+  //glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  //glHint (GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
   glLineWidth (1.5);
+
+  glEnable(GL_DEPTH_TEST);
+  glDepthMask(GL_TRUE);
 
   // set the projection matrix to a normal frustum with a max depth of 50
   glMatrixMode(GL_PROJECTION);
@@ -152,7 +156,7 @@ void Draw_Cube(float red, float green, float blue)
         glVertex3f( 1.0,-1.0,-1.0 );
     glEnd();
 
-    // right 
+    // left 
     glBegin(GL_POLYGON);
         glColor3f(0.0, 0.0, 1.0);
 
@@ -162,7 +166,7 @@ void Draw_Cube(float red, float green, float blue)
         glVertex3f( 1.0, 1.0,-1.0 );
     glEnd();
 
-    // left 
+    // right 
     glBegin(GL_POLYGON);
         glColor3f(0.0, 1.0, 1.0);
 
@@ -171,6 +175,7 @@ void Draw_Cube(float red, float green, float blue)
         glVertex3f(-1.0, 1.0, 1.0 );
         glVertex3f(-1.0,-1.0, 1.0 );
     glEnd();
+    
     
     //  top
     glBegin(GL_POLYGON);
@@ -247,4 +252,7 @@ void Draw(void)
 //  int i = 0, squares = 15;
     float red = 0, blue = 1;
     Draw_Cube(red, 0.6, blue);
+    glTranslatef(2.1, 0, 0);
+    Draw_Cube(red, 0.6, blue);
+    std::cout << glGetString(GL_VERSION) << std::endl;
 }
