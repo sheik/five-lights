@@ -6,28 +6,11 @@
 //  Copyright (c) 2013 Jeff Aigner. All rights reserved.
 //
 
-
-#include <GLTools.h>
-#include <GLShaderManager.h>
-#include <GLFrustum.h>
-#include <GLBatch.h>
-#include <GLMatrixStack.h>
-#include <GLGeometryTransform.h>
-#include <StopWatch.h>
-
-#include <deque>
-#include <unistd.h>
-
-#ifdef __APPLE__
-#include <glut/glut.h>
-#else
-#define FREEGLUT_STATIC
-#include <GL/glut.h>
-#endif
+#include "Main.h"
 
 
-const int GRID_SIZE = 24; // grid will be 32 x 32
-const GLfloat CELL_WIDTH = 1.0f;
+const int GRID_SIZE = 24;                   // grid is square
+const GLfloat CELL_WIDTH = 1.0f;            // cell width
 
 GLShaderManager		shaderManager;			// Shader Manager
 GLMatrixStack		modelViewMatrix;		// Modelview Matrix
@@ -35,21 +18,18 @@ GLMatrixStack		projectionMatrix;		// Projection Matrix
 GLFrustum			viewFrustum;			// View Frustum
 GLGeometryTransform	transformPipeline;		// Geometry Transform Pipeline
 
-GLTriangleBatch		torusBatch;
-GLBatch				floorBatch;
-GLBatch             cubeBatch;
+GLBatch				floorBatch;             // Floor geometry
+GLBatch             cubeBatch;              // Snake geometry
 
 GLFrame             cameraFrame;
 
-// some colors
-const GLfloat WHITE[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-const GLfloat RED[] = { 1.0f, 0.0f, 0.0f, 1.0f };
-const GLfloat GREEN[] = { 0.0f, 1.0f, 0.0f, 1.0f };
-const GLfloat BLUE[] = { 0.0f, 0.0f, 1.0f, 1.0f };
-const GLfloat BLACK[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-
-const GLfloat GRAY[] = { 0.5f, 0.5f, 0.5f, 0.5f };
-const GLfloat DARKGRAY[] = { 0.15f, 0.15f, 0.15f, 1.0f };
+// some common colors
+const GLfloat WHITE[]   = { 1.0f, 1.0f, 1.0f, 1.0f };
+const GLfloat RED[]     = { 1.0f, 0.0f, 0.0f, 1.0f };
+const GLfloat GREEN[]   = { 0.0f, 1.0f, 0.0f, 1.0f };
+const GLfloat BLUE[]    = { 0.0f, 0.0f, 1.0f, 1.0f };
+const GLfloat BLACK[]   = { 0.0f, 0.0f, 0.0f, 1.0f };
+const GLfloat GRAY[]    = { 0.5f, 0.5f, 0.5f, 0.5f };
 
 bool DEBUG_CONTROLS = false;
 
@@ -72,24 +52,25 @@ void SetupRC()
 	
 	glEnable(GL_DEPTH_TEST);
     glEnable(GL_MULTISAMPLE);
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     
-    // make cube
+    // make a cube for the snake, intialize some coordinates for it
     gltMakeCube(cubeBatch, 0.5f);
     snake_coords.push_back({0.0,0.0});
     snake_coords.push_back({1.0,0.0});
     snake_coords.push_back({2.0,0.0});
     
-    // set up initial camera
+    // set up camera view (ugly, sorry)
     cameraFrame.MoveForward(-((GRID_SIZE / 2.0)+(GRID_SIZE / 3.0)));
     cameraFrame.MoveUp(37.0f);
     cameraFrame.RotateWorld(m3dDegToRad(-64.0f), 1.0f, 0.0f, 0.0f);
     cameraFrame.MoveForward(7.0f);
+
     
-    
-    floorBatch.Begin(GL_LINES, 500);
+    // create floor
+    floorBatch.Begin(GL_LINES, 4*(GRID_SIZE+1));
     
     for(int i = 0; i <= GRID_SIZE; i++) {
         floorBatch.Vertex3f(i, -1.0f, 0.0f);
@@ -118,6 +99,12 @@ void ChangeSize(int nWidth, int nHeight)
 }
 
 void UpdateSnakePos(int x) {
+    static uint16_t speed = 100;
+    
+    if(speed > 50)
+        speed -= 1;
+    
+    // Add new head to snake
     if(direction == RIGHT)
         snake_coords.push_front({snake_coords.front().x+1.0f, snake_coords.front().y});
     if(direction == LEFT)
@@ -127,8 +114,11 @@ void UpdateSnakePos(int x) {
     if(direction == DOWN)
         snake_coords.push_front({snake_coords.front().x, snake_coords.front().y+1});
     
+    // remove back of snake
     snake_coords.pop_back();
-    glutTimerFunc(100, UpdateSnakePos, 0);
+    
+    // set up next tick
+    glutTimerFunc(speed, UpdateSnakePos, 0);
 }
 
 
@@ -168,7 +158,7 @@ void RenderScene(void)
     modelViewMatrix.PopMatrix();
     
     // Draw Mr. Snake
-    for( struct coords i : snake_coords) {
+    for( struct coords i : snake_coords ) {
         modelViewMatrix.PushMatrix();
         modelViewMatrix.Translate(i.x-0.5f, -0.5f, i.y-0.5f);
         shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF,
@@ -200,16 +190,12 @@ void SpecialKeys(int key, int x, int y)
     if(DEBUG_CONTROLS) {
         if(key == GLUT_KEY_UP)
             cameraFrame.MoveForward(linear);
-        
         if(key == GLUT_KEY_DOWN)
             cameraFrame.MoveForward(-linear);
-        
         if(key == GLUT_KEY_LEFT)
             cameraFrame.RotateWorld(angular, 0.0f, 1.0f, 0.0f);
-        
         if(key == GLUT_KEY_RIGHT)
             cameraFrame.RotateWorld(-angular, 0.0f, 1.0f, 0.0f);
-        
     } else {
         if(key == GLUT_KEY_RIGHT && direction != LEFT)
             direction = RIGHT;
@@ -220,12 +206,6 @@ void SpecialKeys(int key, int x, int y)
         if(key == GLUT_KEY_UP && direction != DOWN)
             direction = UP;
     }
-    
-    if(key == 'j')
-        cameraFrame.RotateWorld(-angular, 1.0f, 0.0f, 0.0f);
-    
-    if(key == 'k')
-        cameraFrame.RotateWorld(angular, 1.0f, 0.0f, 0.0f);
     
     if(key == 'i')
         DEBUG_CONTROLS = !DEBUG_CONTROLS;
@@ -240,7 +220,7 @@ int main(int argc, char* argv[])
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_MULTISAMPLE);
     glutInitWindowSize(800,600);
     
-    glutCreateWindow("Snake!");
+    glutCreateWindow("Mr. Snake");
     
     glutReshapeFunc(ChangeSize);
     glutDisplayFunc(RenderScene);
