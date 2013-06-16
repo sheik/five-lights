@@ -15,8 +15,8 @@
 #include <GLGeometryTransform.h>
 #include <StopWatch.h>
 
-#include <math.h>
-#include <stdio.h>
+#include <deque>
+#include <unistd.h>
 
 #ifdef __APPLE__
 #include <glut/glut.h>
@@ -38,7 +38,6 @@ GLGeometryTransform	transformPipeline;		// Geometry Transform Pipeline
 GLTriangleBatch		torusBatch;
 GLBatch				floorBatch;
 GLBatch             cubeBatch;
-GLTriangleBatch     sphereBatch;
 
 GLFrame             cameraFrame;
 
@@ -54,8 +53,14 @@ const GLfloat DARKGRAY[] = { 0.15f, 0.15f, 0.15f, 1.0f };
 
 bool DEBUG_CONTROLS = false;
 
-GLfloat snake_x = 1.0f;
-GLfloat snake_z = 0.0f;
+struct coords { GLfloat x, y; };
+
+std::deque<coords> snake_coords;
+
+enum direction_t { UP, DOWN, LEFT, RIGHT };
+
+direction_t direction = RIGHT;
+
 
 //////////////////////////////////////////////////////////////////
 // This function does any needed initialization on the rendering
@@ -70,15 +75,12 @@ void SetupRC()
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	
-	// This makes a torus
-	gltMakeTorus(torusBatch, 0.4f, 0.15f, 30, 30);
     
     // make cube
     gltMakeCube(cubeBatch, 0.5f);
-    
-    // make sphere
-    gltMakeSphere(sphereBatch, 0.10, 30, 30);
+    snake_coords.push_back({0.0,0.0});
+    snake_coords.push_back({1.0,0.0});
+    snake_coords.push_back({2.0,0.0});
     
     // set up initial camera
     cameraFrame.MoveForward(-((GRID_SIZE / 2.0)+(GRID_SIZE / 3.0)));
@@ -115,6 +117,20 @@ void ChangeSize(int nWidth, int nHeight)
 	transformPipeline.SetMatrixStacks(modelViewMatrix, projectionMatrix);
 }
 
+void UpdateSnakePos(int x) {
+    if(direction == RIGHT)
+        snake_coords.push_front({snake_coords.front().x+1.0f, snake_coords.front().y});
+    if(direction == LEFT)
+        snake_coords.push_front({snake_coords.front().x-1.0f, snake_coords.front().y});
+    if(direction == UP)
+        snake_coords.push_front({snake_coords.front().x, snake_coords.front().y-1});
+    if(direction == DOWN)
+        snake_coords.push_front({snake_coords.front().x, snake_coords.front().y+1});
+    
+    snake_coords.pop_back();
+    glutTimerFunc(100, UpdateSnakePos, 0);
+}
+
 
 // Called to draw scene
 void RenderScene(void)
@@ -122,7 +138,7 @@ void RenderScene(void)
     // Time Based animation
 	static CStopWatch	rotTimer;
 	//float yRot = rotTimer.GetElapsedSeconds() * 60.0f;
-	
+
 	// Clear the color and depth buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	
@@ -152,15 +168,17 @@ void RenderScene(void)
     modelViewMatrix.PopMatrix();
     
     // Draw Mr. Snake
-    modelViewMatrix.PushMatrix();
-    modelViewMatrix.Translate(snake_x-0.5f, -0.5f, snake_z-0.5f);
-    shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF,
-                                 transformPipeline.GetModelViewMatrix(),
-                                 transformPipeline.GetProjectionMatrix(),
-                                 vLightEyePos, GREEN);
-    
-    cubeBatch.Draw();
-    modelViewMatrix.PopMatrix();
+    for( struct coords i : snake_coords) {
+        modelViewMatrix.PushMatrix();
+        modelViewMatrix.Translate(i.x-0.5f, -0.5f, i.y-0.5f);
+        shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF,
+                                     transformPipeline.GetModelViewMatrix(),
+                                     transformPipeline.GetProjectionMatrix(),
+                                     vLightEyePos, GREEN);
+        
+        cubeBatch.Draw();
+        modelViewMatrix.PopMatrix();
+    }
     
 	// Restore the previous modleview matrix (the idenity matrix)
 	modelViewMatrix.PopMatrix();
@@ -191,32 +209,26 @@ void SpecialKeys(int key, int x, int y)
         
         if(key == GLUT_KEY_RIGHT)
             cameraFrame.RotateWorld(-angular, 0.0f, 1.0f, 0.0f);
+        
+    } else {
+        if(key == GLUT_KEY_RIGHT && direction != LEFT)
+            direction = RIGHT;
+        if(key == GLUT_KEY_LEFT && direction != RIGHT)
+            direction = LEFT;
+        if(key == GLUT_KEY_DOWN && direction != UP)
+            direction = DOWN;
+        if(key == GLUT_KEY_UP && direction != DOWN)
+            direction = UP;
     }
-    
-    if(key == GLUT_KEY_RIGHT)
-        snake_x += 1.0f;
-    if(key == GLUT_KEY_LEFT)
-        snake_x -= 1.0f;
-    if(key == GLUT_KEY_DOWN)
-        snake_z += 1.0f;
-    if(key == GLUT_KEY_UP)
-        snake_z -= 1.0f;
-    
-    if(snake_z > GRID_SIZE/2.0f)
-        snake_z = GRID_SIZE/2.0f;
-    if(snake_z < -GRID_SIZE/2.0f+1.0f)
-        snake_z = -GRID_SIZE/2.0f+1.0f;
-    
-    if(snake_x > GRID_SIZE/2.0f)
-        snake_x = GRID_SIZE / 2.0f;
-    if(snake_x < -GRID_SIZE/2.0f+1.0f)
-        snake_x = -GRID_SIZE/2.0f+1.0f;
     
     if(key == 'j')
         cameraFrame.RotateWorld(-angular, 1.0f, 0.0f, 0.0f);
     
     if(key == 'k')
         cameraFrame.RotateWorld(angular, 1.0f, 0.0f, 0.0f);
+    
+    if(key == 'i')
+        DEBUG_CONTROLS = !DEBUG_CONTROLS;
     
 }
 
@@ -240,8 +252,7 @@ int main(int argc, char* argv[])
         return 1;
     }
     
-    
     SetupRC();
+    glutTimerFunc(100, UpdateSnakePos, 0);
     glutMainLoop();
-    return 0;
 }
