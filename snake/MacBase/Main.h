@@ -19,6 +19,7 @@
 
 #include <deque>
 #include <unistd.h>
+#include <random>
 
 #ifdef __APPLE__
 #include <glut/glut.h>

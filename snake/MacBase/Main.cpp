@@ -33,13 +33,20 @@ const GLfloat GRAY[]    = { 0.5f, 0.5f, 0.5f, 0.5f };
 
 bool DEBUG_CONTROLS = false;
 
+// FOOD adds a segment
+// BOMB removes 2 segments
+enum agent_type { FOOD, BOMB };
+
 struct coords { GLfloat x, y; };
+struct agent { coords coords; agent_type type; };
 
 std::deque<coords> snake_coords;
+std::deque<agent> agents;
 
 enum direction_t { UP, DOWN, LEFT, RIGHT };
 
 direction_t direction = RIGHT;
+direction_t last_direction = RIGHT;
 
 
 //////////////////////////////////////////////////////////////////
@@ -58,9 +65,10 @@ void SetupRC()
     
     // make a cube for the snake, intialize some coordinates for it
     gltMakeCube(cubeBatch, 0.5f);
-    snake_coords.push_back({0.0,0.0});
-    snake_coords.push_back({1.0,0.0});
-    snake_coords.push_back({2.0,0.0});
+    snake_coords.push_front({0.0,0.0});
+    snake_coords.push_front({1.0,0.0});
+    snake_coords.push_front({2.0,0.0});
+    agents.push_front({ {10.0, 15.0}, FOOD });
     
     // set up camera view (ugly, sorry)
     cameraFrame.MoveForward(-((GRID_SIZE / 2.0)+(GRID_SIZE / 3.0)));
@@ -98,11 +106,17 @@ void ChangeSize(int nWidth, int nHeight)
 	transformPipeline.SetMatrixStacks(modelViewMatrix, projectionMatrix);
 }
 
-void UpdateSnakePos(int x) {
-    static uint16_t speed = 100;
+void PlaceFood(void)
+{
+    static std::default_random_engine dre;
+    static std::uniform_int_distribution<int> di(0, GRID_SIZE-1);
     
-    if(speed > 50)
-        speed -= 1;
+    agents.push_front( {{ GLfloat(di(dre)), GLfloat(di(dre)) }, FOOD } );
+}
+
+void UpdateSnakePos(int x) {
+    static uint16_t speed = 200;
+    bool grow = false;
     
     // Add new head to snake
     if(direction == RIGHT)
@@ -114,8 +128,30 @@ void UpdateSnakePos(int x) {
     if(direction == DOWN)
         snake_coords.push_front({snake_coords.front().x, snake_coords.front().y+1});
     
+    
+    for( struct agent& i : agents ) {
+        if(i.coords.x == snake_coords.front().x && i.coords.y == snake_coords.front().y) {
+            // collision
+            if(i.type == FOOD) {
+                agents.pop_front();
+                PlaceFood();
+                grow = true;
+                if(speed > 50)
+                    speed -= 10;
+            }
+        }
+    }
+    
+    // Check for collision with self
+    for( const struct coords& i : snake_coords) {
+        if(&i != &snake_coords.front() && i.x == snake_coords.front().x && i.y == snake_coords.front().y)
+            return;
+    }
+    
+    
     // remove back of snake
-    snake_coords.pop_back();
+    if(!grow)
+        snake_coords.pop_back();
     
     // set up next tick
     glutTimerFunc(speed, UpdateSnakePos, 0);
@@ -125,10 +161,6 @@ void UpdateSnakePos(int x) {
 // Called to draw scene
 void RenderScene(void)
 {
-    // Time Based animation
-	static CStopWatch	rotTimer;
-	//float yRot = rotTimer.GetElapsedSeconds() * 60.0f;
-
 	// Clear the color and depth buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	
@@ -158,9 +190,12 @@ void RenderScene(void)
     modelViewMatrix.PopMatrix();
     
     // Draw Mr. Snake
+    modelViewMatrix.PushMatrix();
+    modelViewMatrix.Translate(-GRID_SIZE/2.0f, 0.0f, -GRID_SIZE/2.0f);
     for( struct coords i : snake_coords ) {
+        last_direction = direction;
         modelViewMatrix.PushMatrix();
-        modelViewMatrix.Translate(i.x-0.5f, -0.5f, i.y-0.5f);
+        modelViewMatrix.Translate(i.x-0.5f, -0.5f, i.y+0.5f);
         shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF,
                                      transformPipeline.GetModelViewMatrix(),
                                      transformPipeline.GetProjectionMatrix(),
@@ -169,6 +204,20 @@ void RenderScene(void)
         cubeBatch.Draw();
         modelViewMatrix.PopMatrix();
     }
+    
+    for( struct agent i : agents) {
+        modelViewMatrix.PushMatrix();
+        modelViewMatrix.Translate(i.coords.x-0.5f, -0.5f, i.coords.y+0.5f);
+        shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF,
+                                     transformPipeline.GetModelViewMatrix(),
+                                     transformPipeline.GetProjectionMatrix(),
+                                     vLightEyePos, RED);
+        
+        cubeBatch.Draw();
+        modelViewMatrix.PopMatrix();
+    }
+    modelViewMatrix.PopMatrix();
+    
     
 	// Restore the previous modleview matrix (the idenity matrix)
 	modelViewMatrix.PopMatrix();
